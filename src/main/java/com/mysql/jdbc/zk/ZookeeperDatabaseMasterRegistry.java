@@ -5,7 +5,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
@@ -41,7 +40,6 @@ public class ZookeeperDatabaseMasterRegistry {
     private CuratorFramework client;
     private ConnectionStateListener connectionStateListener;
 
-    private final String masterWatchPath;
     private final PathChildrenCache masterEndpointsCache;
     private final AtomicBoolean everConnected = new AtomicBoolean(false);
 
@@ -56,12 +54,6 @@ public class ZookeeperDatabaseMasterRegistry {
             throw new IllegalStateException("Unable to find any Zookeeper addresses returned from driver " +
                     "configuration of type " + driverConfig.getClass());
         }
-        String nodePath = driverConfig.getNodeWatchDirectory();
-        // trim trailing forward slash
-        if (nodePath.endsWith("/")) {
-            nodePath = nodePath.substring(0, nodePath.length() - 1);
-        }
-        this.masterWatchPath = nodePath;
 
         // start zookeeper client and initialize master host/port configurations
         ExponentialBackoffRetry retryPolicy = new ExponentialBackoffRetry(1000, 2);
@@ -84,8 +76,10 @@ public class ZookeeperDatabaseMasterRegistry {
         client.start();
 
         // create cache of endpoints for each databaseId
-        masterEndpointsCache = new PathChildrenCache(client, masterWatchPath, true,
-                new ThreadFactoryBuilder().setNameFormat("mysql-master-watcher-%d").build());
+        masterEndpointsCache = driverConfig.createMasterHostNodeCache(client);
+        if (masterEndpointsCache == null) {
+            throw new IllegalStateException("Zookeeper master-host node cache was null?");
+        }
 
         Optional<Long> cacheDurationMillis = driverConfig.getHostnameCacheDurationMillis();
         if (cacheDurationMillis != null && cacheDurationMillis.isPresent() && cacheDurationMillis.get() > 0) {
@@ -140,11 +134,7 @@ public class ZookeeperDatabaseMasterRegistry {
             log.info("Connected to Zookeeper cluster for MySQL DB master registry");
 
             // eagerly populate the cache of endpoints
-            if (everConnected.compareAndSet(false, true)) {
-                masterEndpointsCache.start(PathChildrenCache.StartMode.BUILD_INITIAL_CACHE);
-            } else {
-                masterEndpointsCache.rebuild();
-            }
+            driverConfig.onZookeeperConnected(client, masterEndpointsCache, everConnected.compareAndSet(false, true));
         } catch (Exception e) {
             log.error("Unable to load/refresh the MySQL master registry from Zookeeper", e);
         }

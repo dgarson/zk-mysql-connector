@@ -1,6 +1,7 @@
 package com.mysql.jdbc.zk;
 
 import com.google.common.base.Optional;
+import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.framework.recipes.cache.PathChildrenCache;
 
@@ -37,18 +38,28 @@ public interface ZookeeperMysqlDriverConfiguration {
      * Returns the current master host/port for a given database name, or an absent Optional if there is no known master
      * that can be used for that database.
      * @param databaseId the database identifier
-     * @param zkNodeTree the Zookeeper-backed path-children node data cache based on a watch on the path returned from
-     *                      {@link #getNodeWatchDirectory()}
+     * @param zkHostNodeCache the Zookeeper-backed path-children node data cache based on a cache created via this
+     *                        object's {@link #createMasterHostNodeCache(CuratorFramework)}
      * @return the master host/port string for the database or absent if no known master to use
      */
     @Nonnull
-    Optional<String> getCurrentMasterForDatabase(String databaseId, PathChildrenCache zkNodeTree);
+    Optional<String> getCurrentMasterForDatabase(String databaseId, PathChildrenCache zkHostNodeCache);
 
     /**
-     * Returns the top-most parent directory within which all Zookeeper nodes used for master configuration with this
-     * MySQL driver live. Therefore all values of {@link #getCurrentMasterForDatabase(String, PathChildrenCache)} for
-     * all database IDs must be under the returned path. This path may be environment-specific.
+     * Creates the actual path child cache object that will be passed into each call to getCurrentMasterForDatabase,
+     * allowing the implementor of this class to have complete control over how that is initialized and its path, etc.
+     * @param zkClient the zookeeper client to use for the cache
+     * @return the non-null cache object configured to watch the top-most directory for MySQL database master hosts'
+     *          nodes
      */
     @Nonnull
-    String getNodeWatchDirectory();
+    PathChildrenCache createMasterHostNodeCache(CuratorFramework zkClient);
+
+    /**
+     * Called whenever Zookeeper client becomes connected. This also provides a reference to the PathChildrenCache in
+     * it must be rebuilt at this time. Generally, this is where an implementor would call something like
+     * {@link PathChildrenCache#start(PathChildrenCache.StartMode)}
+     */
+    void onZookeeperConnected(@Nonnull CuratorFramework client, @Nonnull PathChildrenCache zkHostNodeCache,
+                              boolean firstTimeConnected);
 }

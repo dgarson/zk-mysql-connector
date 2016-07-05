@@ -4,6 +4,8 @@ import com.google.common.base.Optional;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.framework.recipes.cache.ChildData;
 import org.apache.curator.framework.recipes.cache.PathChildrenCache;
@@ -106,10 +108,28 @@ public class BasicZookeeperMysqlDriverConfiguration implements ZookeeperMysqlDri
 
     @Nonnull
     @Override
-    public String getNodeWatchDirectory() {
-        return watchPath;
+    public PathChildrenCache createMasterHostNodeCache(CuratorFramework zkClient) {
+        // create cache of endpoints for each databaseId
+        PathChildrenCache cache = new PathChildrenCache(zkClient, watchPath, true,
+                new ThreadFactoryBuilder().setNameFormat("mysql-master-watcher-%d").build());
+        return cache;
     }
 
+    @Override
+    public void onZookeeperConnected(@Nonnull CuratorFramework client, @Nonnull PathChildrenCache zkHostNodeCache,
+                                     boolean firstTimeConnected) {
+        try {
+            if (firstTimeConnected) {
+                // block for full cache priming on startup
+                zkHostNodeCache.start(PathChildrenCache.StartMode.BUILD_INITIAL_CACHE);
+            } else {
+                // clear and allow cache to repopulate when reconnecting to ZK after startup
+                zkHostNodeCache.clearAndRefresh();
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("Unable to build ZK node cache path for watch directory '" + watchPath + "'", e);
+        }
+    }
 
     private static String getProperty(String propName, boolean required) {
         String value = System.getProperty(propName);
