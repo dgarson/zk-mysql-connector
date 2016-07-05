@@ -1,0 +1,48 @@
+apply plugin: 'java'
+apply plugin: 'idea'
+
+group 'org.drg'
+
+version '5.1.38-v0.1'
+
+sourceCompatibility = JavaVersion.VERSION_1_7
+targetCompatibility = JavaVersion.VERSION_1_7
+
+ext {
+    versions = [
+                c3p0: '0.9.2.1',
+                curator: '2.6.0',
+                guava: '18.0',
+                slf4j: '1.7.7',
+                junit: '4.12',
+                jsr305: '3.0.0',
+                spring: '3.2.13.RELEASE',
+                logback: '1.1.7',
+                mockito: '1.9.5',
+                mysqlconnector: '5.1.38',
+                'commons-lang3': '3.3.2'
+            ]
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+	compile "org.apache.curator:curator-framework:${versions.curator}",
+            "org.apache.curator:curator-recipes:${versions.curator}"
+            
+    compile "com.google.code.findbugs:jsr305:${versions.jsr305}",
+            "com.google.guava:guava:${versions.guava}",
+            "joda-time:joda-time:${versions['joda-time']}",
+            "org.slf4j:slf4j-api:${versions.slf4j}",
+            "org.apache.commons:commons-lang3:${versions['commons-lang3']}",
+            "mysql:mysql-connector-java:${versions.mysqlconnector}",
+    		"com.mchange:c3p0:${versions.c3p0}"
+            
+    testCompile "org.junit:junit:${versions.junit}",
+    			"org.mockito:mockito-core:${versions.mockito}"
+    			
+    testRuntime "ch.qos.logback:logback-classic:${versions.logback}"   
+}
+
